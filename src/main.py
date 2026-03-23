@@ -31,6 +31,7 @@ def run(
     skip_papers: bool = False,
     skip_influencers: bool = False,
     skip_github: bool = False,
+    publish_blog: bool = False,
     verbose: bool = False,
 ) -> Path:
     """运行资讯收集并生成报告"""
@@ -86,7 +87,7 @@ def run(
             progress.update(task, description=f"✅ 项目：{len(github_projects)} 个")
             progress.stop_task(task)
 
-    # 生成报告
+    # 生成 Markdown 报告（本地存档）
     from src.report_generator import generate_report, save_report
     report_content = generate_report(news_items, papers, influencer_updates, github_projects)
     report_path = save_report(report_content, output_dir)
@@ -94,6 +95,28 @@ def run(
     console.print(f"\n✅ [bold green]报告已生成：[/bold green][cyan]{report_path}[/cyan]")
     console.print(f"   📰 资讯：{len(news_items)} 条 | 📄 论文：{len(papers)} 篇 | "
                   f"🧑‍🔬 动态：{len(influencer_updates)} 条 | 🔥 项目：{len(github_projects)} 个")
+
+    # 发布到 Jekyll 博客
+    if publish_blog:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task("📝 发布到博客...", total=None)
+            from src.blog_publisher import publish_from_env
+            success = publish_from_env(news_items, papers, influencer_updates, github_projects)
+            if success:
+                progress.update(task, description="✅ 博客发布成功")
+            else:
+                progress.update(task, description="⚠️  博客发布跳过（未配置 BLOG_DEPLOY_TOKEN）")
+            progress.stop_task(task)
+
+        if success:
+            console.print("   📝 [bold green]已自动发布到博客[/bold green]")
+        else:
+            console.print("   ⚠️  [yellow]博客发布跳过，请检查 BLOG_DEPLOY_TOKEN 环境变量[/yellow]")
 
     return report_path
 
@@ -117,6 +140,8 @@ def main() -> None:
     parser.add_argument("--skip-papers", action="store_true", help="跳过论文收集")
     parser.add_argument("--skip-influencers", action="store_true", help="跳过大牛动态收集")
     parser.add_argument("--skip-github", action="store_true", help="跳过 GitHub 热门项目")
+    parser.add_argument("--publish-blog", action="store_true",
+                        help="生成报告后自动发布到 Jekyll 博客（需配置 BLOG_DEPLOY_TOKEN）")
     parser.add_argument("--verbose", "-v", action="store_true", help="输出详细日志")
 
     args = parser.parse_args()
@@ -129,6 +154,7 @@ def main() -> None:
             skip_papers=args.skip_papers,
             skip_influencers=args.skip_influencers,
             skip_github=args.skip_github,
+            publish_blog=args.publish_blog,
             verbose=args.verbose,
         )
     except KeyboardInterrupt:
