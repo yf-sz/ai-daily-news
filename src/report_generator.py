@@ -29,19 +29,28 @@ def _format_date(dt: datetime | None) -> str:
 
 
 def _build_news_section(news_items: List[NewsItem]) -> str:
+    # influencer 分类在"大牛动态"章节单独展示，这里过滤掉
+    news_items = [i for i in news_items if i.category != "influencer"]
     if not news_items:
         return "_今日暂无最新资讯_\n"
 
-    # 按分类分组
+    # 按分类分组，类别优先级排序
+    cat_order = ["industry", "research", "tools", "newsletter", "tutorial", "general"]
     by_category: dict[str, List[NewsItem]] = {}
     for item in news_items:
         by_category.setdefault(item.category, []).append(item)
 
+    sorted_cats = sorted(
+        by_category.keys(),
+        key=lambda c: cat_order.index(c) if c in cat_order else 99,
+    )
+
     lines: List[str] = []
-    for cat, items in by_category.items():
+    for cat in sorted_cats:
+        items = by_category[cat]
         cat_name = CATEGORY_NAMES.get(cat, cat)
         lines.append(f"\n### {cat_name}\n")
-        for item in items[:8]:  # 每分类最多 8 条
+        for item in items[:12]:  # 每分类最多 12 条（原 8 条）
             date_str = _format_date(item.published)
             lines.append(f"- **[{item.title}]({item.url})**")
             lines.append(f"  - 来源：{item.source} | 时间：{date_str}")
@@ -92,19 +101,28 @@ def _build_influencer_section(updates: List[InfluencerUpdate]) -> str:
     if not updates:
         return "_今日暂无大牛动态_\n"
 
-    # 按平台分组
+    # 按平台分组：Twitter/X 优先，Blog 次之
     by_platform: dict[str, List[InfluencerUpdate]] = {}
     for update in updates:
         by_platform.setdefault(update.platform, []).append(update)
 
+    # Twitter/X → Blog 排序
+    platform_order = ["Twitter/X", "Blog"]
+    sorted_platforms = sorted(
+        by_platform.keys(),
+        key=lambda p: platform_order.index(p) if p in platform_order else 99,
+    )
+
     lines: List[str] = []
-    for platform, items in by_platform.items():
+    for platform in sorted_platforms:
+        items = by_platform[platform]
         lines.append(f"\n### {platform}\n")
-        for item in items[:10]:
-            date_str = _format_date(item.published)
-            lines.append(f"#### [{item.author}]({item.url})")
-            lines.append(f"_{date_str}_")
-            if platform == "Twitter/X":
+
+        if platform == "Twitter/X":
+            for item in items[:15]:
+                date_str = _format_date(item.published)
+                lines.append(f"#### [{item.author}]({item.url})")
+                lines.append(f"_{date_str}_")
                 lines.append(f"\n{item.content}")
                 stats = []
                 if item.likes:
@@ -113,9 +131,21 @@ def _build_influencer_section(updates: List[InfluencerUpdate]) -> str:
                     stats.append(f"🔁 {item.reposts}")
                 if stats:
                     lines.append(" | ".join(stats))
-            else:
-                lines.append(f"\n{item.content}")
-            lines.append("")
+                lines.append("")
+        else:
+            # Blog：每篇显示标题（链接） + 作者 + 摘要
+            for item in items[:30]:
+                date_str = _format_date(item.published)
+                title = item.title or item.content[:60] + "..."
+                lines.append(f"- **[{title}]({item.url})**")
+                lines.append(f"  - 作者：{item.author} | {date_str}")
+                if item.content and item.content != title:
+                    # 摘要截短避免报告过长
+                    snippet = item.content[:150].rstrip()
+                    if len(item.content) > 150:
+                        snippet += "..."
+                    lines.append(f"  - {snippet}")
+                lines.append("")
 
     return "\n".join(lines)
 

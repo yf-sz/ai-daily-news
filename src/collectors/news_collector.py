@@ -46,12 +46,13 @@ def _is_recent(dt: Optional[datetime], days: int) -> bool:
     return dt >= cutoff
 
 
-def collect_from_rss(feed_config: dict) -> List[NewsItem]:
-    """从单个 RSS Feed 收集新闻"""
+def collect_from_rss(feed_config: dict, days_back: int | None = None) -> List[NewsItem]:
+    """从单个 RSS Feed 收集新闻。days_back 覆盖全局设置（用于影响者博客等低频源）"""
     items: List[NewsItem] = []
     url = feed_config["url"]
     name = feed_config["name"]
     category = feed_config.get("category", "general")
+    effective_days = days_back if days_back is not None else settings.days_back
 
     try:
         # feedparser 本身处理 HTTP，设置 timeout 需要用 requests 预取
@@ -66,7 +67,7 @@ def collect_from_rss(feed_config: dict) -> List[NewsItem]:
 
     for entry in feed.entries[: settings.max_items_per_source]:
         published = _parse_published(entry)
-        if not _is_recent(published, settings.days_back):
+        if not _is_recent(published, effective_days):
             continue
 
         summary = getattr(entry, "summary", "") or ""

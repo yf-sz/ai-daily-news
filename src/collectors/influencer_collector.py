@@ -20,6 +20,7 @@ class InfluencerUpdate:
     content: str
     url: str
     published: Optional[datetime]
+    title: str = ""          # 博文标题（Twitter/X 为空）
     likes: int = 0
     reposts: int = 0
     tags: List[str] = field(default_factory=list)
@@ -109,19 +110,23 @@ def _collect_twitter_updates() -> List[InfluencerUpdate]:
 # ─── 博客 RSS（从新闻收集器中筛选 influencer 分类）─────────────────────────────
 
 def _collect_blog_updates() -> List[InfluencerUpdate]:
-    """并发收集 AI 研究者博客更新"""
+    """并发收集 AI 研究者博客更新（时间窗口扩展到 7 天，避免低频博主漏收）"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from src.collectors.news_collector import collect_from_rss
+
+    # 研究者博客发文频率低，用更长窗口（取全局设置与 7 天的较大值）
+    blog_days_back = max(settings.days_back, 7)
 
     updates: List[InfluencerUpdate] = []
     feeds = [f for f in sources.get("news_feeds", []) if f.get("category") == "influencer"]
 
     def _fetch(feed_config: dict) -> List[InfluencerUpdate]:
-        items = collect_from_rss(feed_config)
+        items = collect_from_rss(feed_config, days_back=blog_days_back)
         return [
             InfluencerUpdate(
                 author=feed_config["name"],
                 platform="Blog",
+                title=item.title,
                 content=item.summary,
                 url=item.url,
                 published=item.published,
