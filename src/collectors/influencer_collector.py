@@ -25,15 +25,25 @@ class InfluencerUpdate:
     tags: List[str] = field(default_factory=list)
 
 
-# ─── Twitter/X ────────────────────────────────────────────────────────────────
+# ─── Twitter/X（仅当明确配置 token 且可连接时才尝试）──────────────────────────
 
 def _collect_twitter_updates() -> List[InfluencerUpdate]:
-    """通过 Twitter API v2 收集 AI 大牛推文"""
+    """通过 Twitter API v2 收集 AI 大牛推文（可选，不影响主流程）"""
+    import socket
     updates: List[InfluencerUpdate] = []
     token = settings.twitter_bearer_token
     if not token:
-        logger.info("未配置 TWITTER_BEARER_TOKEN，跳过 Twitter 收集")
+        return updates  # 未配置直接跳过，不打印任何警告
+
+    # 快速检测 Twitter API 是否可达（3 秒超时），不可达则静默跳过
+    try:
+        socket.setdefaulttimeout(3)
+        socket.create_connection(("api.twitter.com", 443))
+    except OSError:
+        logger.info("Twitter/X API 不可达，跳过（不影响其他数据收集）")
         return updates
+    finally:
+        socket.setdefaulttimeout(None)
 
     accounts = sources.get("twitter_accounts", [])
     headers = {"Authorization": f"Bearer {token}"}
@@ -43,8 +53,6 @@ def _collect_twitter_updates() -> List[InfluencerUpdate]:
     for account in accounts:
         username = account["username"]
         name = account["name"]
-
-        # 获取用户 ID
         try:
             resp = requests.get(
                 f"https://api.twitter.com/2/users/by/username/{username}",
@@ -53,12 +61,7 @@ def _collect_twitter_updates() -> List[InfluencerUpdate]:
             )
             resp.raise_for_status()
             user_id = resp.json()["data"]["id"]
-        except Exception as e:
-            logger.warning(f"获取 Twitter 用户 [{username}] 失败: {e}")
-            continue
 
-        # 获取最新推文
-        try:
             resp = requests.get(
                 f"https://api.twitter.com/2/users/{user_id}/tweets",
                 headers=headers,
@@ -73,7 +76,7 @@ def _collect_twitter_updates() -> List[InfluencerUpdate]:
             resp.raise_for_status()
             tweets = resp.json().get("data", [])
         except Exception as e:
-            logger.warning(f"获取 [{username}] 推文失败: {e}")
+            logger.debug(f"Twitter [{username}] 跳过: {e}")
             continue
 
         for tweet in tweets:
@@ -85,21 +88,16 @@ def _collect_twitter_updates() -> List[InfluencerUpdate]:
                     )
                 except ValueError:
                     pass
-
             metrics = tweet.get("public_metrics", {})
-            tweet_id = tweet["id"]
-
             updates.append(InfluencerUpdate(
                 author=name,
                 platform="Twitter/X",
                 content=tweet["text"],
-                url=f"https://twitter.com/{username}/status/{tweet_id}",
+                url=f"https://twitter.com/{username}/status/{tweet['id']}",
                 published=created_at,
                 likes=metrics.get("like_count", 0),
                 reposts=metrics.get("retweet_count", 0),
             ))
-
-        logger.info(f"  [{username}] 获取 {len(tweets)} 条推文")
 
     updates.sort(
         key=lambda x: x.published or datetime.min.replace(tzinfo=timezone.utc),
