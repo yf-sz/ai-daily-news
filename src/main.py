@@ -31,6 +31,7 @@ def run(
     skip_papers: bool = False,
     skip_influencers: bool = False,
     skip_github: bool = False,
+    skip_pages: bool = False,
     publish_blog: bool = False,
     verbose: bool = False,
 ) -> Path:
@@ -87,6 +88,14 @@ def run(
             progress.update(task, description=f"✅ 项目：{len(github_projects)} 个")
             progress.stop_task(task)
 
+        if not skip_pages:
+            task = progress.add_task("🌐 抓取页面资讯...", total=None)
+            from src.collectors.page_collector import collect_all_pages
+            page_items = collect_all_pages()
+            news_items.extend(page_items)
+            progress.update(task, description=f"✅ 页面：{len(page_items)} 条")
+            progress.stop_task(task)
+
     # 生成 Markdown 报告（本地存档）
     from src.report_generator import generate_report, save_report
     report_content = generate_report(news_items, papers, influencer_updates, github_projects)
@@ -140,6 +149,7 @@ def main() -> None:
     parser.add_argument("--skip-papers", action="store_true", help="跳过论文收集")
     parser.add_argument("--skip-influencers", action="store_true", help="跳过大牛动态收集")
     parser.add_argument("--skip-github", action="store_true", help="跳过 GitHub 热门项目")
+    parser.add_argument("--skip-pages", action="store_true", help="跳过 HTML 页面抓取")
     parser.add_argument("--publish-blog", action="store_true",
                         help="生成报告后自动发布到 Jekyll 博客（需配置 BLOG_DEPLOY_TOKEN）")
     parser.add_argument("--verbose", "-v", action="store_true", help="输出详细日志")
@@ -154,6 +164,7 @@ def main() -> None:
             skip_papers=args.skip_papers,
             skip_influencers=args.skip_influencers,
             skip_github=args.skip_github,
+            skip_pages=args.skip_pages,
             publish_blog=args.publish_blog,
             verbose=args.verbose,
         )
