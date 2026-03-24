@@ -148,71 +148,145 @@ class GithubProject:
     contributors: List[str] = field(default_factory=list)
 
 
-def collect_github_trending() -> List[GithubProject]:
-    """收集 GitHub AI 相关趋势项目"""
-    projects: List[GithubProject] = []
+def _scrape_github_trending() -> List[GithubProject]:
+    """直接抓取 GitHub Trending 官方页面（无需 API，最稳定）"""
+    import os
+    from bs4 import BeautifulSoup
 
+    projects: List[GithubProject] = []
     try:
-        # 使用非官方 trending API
         resp = requests.get(
-            "https://github-trending-api.walidvb.com/repositories",
-            params={"language": "", "since": "daily", "spoken_language_code": ""},
+            "https://github.com/trending",
+            params={"since": "daily"},
             timeout=settings.request_timeout,
-            headers={"User-Agent": "AI-Daily-News-Bot/1.0"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; AI-Daily-News-Bot/1.0)"},
         )
         resp.raise_for_status()
-        data = resp.json()
-    except Exception:
-        # 备用：抓取 GitHub trending 页面
+    except Exception as e:
+        logger.warning(f"抓取 GitHub Trending 页面失败: {e}")
+        return projects
+
+    soup = BeautifulSoup(resp.text, "lxml")
+    for article in soup.select("article.Box-row")[:30]:
         try:
-            resp = requests.get(
-                "https://api.github.com/search/repositories",
-                params={
-                    "q": "topic:machine-learning+topic:deep-learning stars:>100",
-                    "sort": "updated",
-                    "order": "desc",
-                    "per_page": 10,
-                },
-                timeout=settings.request_timeout,
-                headers={
-                    "User-Agent": "AI-Daily-News-Bot/1.0",
-                    "Accept": "application/vnd.github.v3+json",
-                },
-            )
-            resp.raise_for_status()
-            items = resp.json().get("items", [])
-            for item in items:
-                projects.append(GithubProject(
-                    name=item.get("full_name", ""),
-                    url=item.get("html_url", ""),
-                    description=item.get("description", "") or "",
-                    stars=item.get("stargazers_count", 0),
-                    forks=item.get("forks_count", 0),
-                    language=item.get("language", "") or "",
-                ))
-            return projects[:10]
-        except Exception as e:
-            logger.warning(f"GitHub Trending 获取失败: {e}")
-            return projects
+            # 仓库名
+            repo_link = article.select_one("h2 a")
+            if not repo_link:
+                continue
+            full_name = repo_link.get("href", "").strip("/")
+            url = f"https://github.com/{full_name}"
 
-    ai_keywords = {"ai", "llm", "ml", "deep", "neural", "gpt", "bert", "diffus", "transformer"}
+            # 描述
+            desc_el = article.select_one("p")
+            description = desc_el.get_text(strip=True) if desc_el else ""
 
-    for repo in data[:30]:
-        desc = (repo.get("description") or "").lower()
-        name = repo.get("name", "").lower()
-        if any(kw in desc or kw in name for kw in ai_keywords):
+            # Stars / Forks
+            def _parse_int(el) -> int:
+                if el is None:
+                    return 0
+                txt = el.get_text(strip=True).replace(",", "").replace("k", "00")
+                try:
+                    return int(txt)
+                except ValueError:
+                    return 0
+
+            stars = _parse_int(article.select_one("a[href$='/stargazers']"))
+            forks = _parse_int(article.select_one("a[href$='/forks']"))
+
+            # 今日新增 Stars
+            today_el = article.select_one("span.d-inline-block.float-sm-right")
+            today_stars = 0
+            if today_el:
+                txt = today_el.get_text(strip=True).replace(",", "")
+                nums = [c for c in txt.split() if c.isdigit()]
+                today_stars = int(nums[0]) if nums else 0
+
+            # 语言
+            lang_el = article.select_one("[itemprop='programmingLanguage']")
+            language = lang_el.get_text(strip=True) if lang_el else ""
+
+            # 贡献者
+            contributors = [
+                a.get("href", "").strip("/")
+                for a in article.select("a[data-hovercard-type='user']")
+            ]
+
+            # 只保留 AI 相关
+            ai_keywords = {
+                "ai", "llm", "ml", "deep", "neural", "gpt", "bert",
+                "diffus", "transformer", "model", "inference", "agent",
+            }
+            text = (full_name + " " + description).lower()
+            if not any(kw in text for kw in ai_keywords):
+                continue
+
             projects.append(GithubProject(
-                name=repo.get("author", "") + "/" + repo.get("name", ""),
-                url=repo.get("url", ""),
-                description=repo.get("description", "") or "",
-                stars=repo.get("stars", 0),
-                forks=repo.get("forks", 0),
-                language=repo.get("language", "") or "",
-                today_stars=repo.get("currentPeriodStars", 0),
-                contributors=[c.get("username", "") for c in repo.get("builtBy", [])],
+                name=full_name,
+                url=url,
+                description=description,
+                stars=stars,
+                forks=forks,
+                language=language,
+                today_stars=today_stars,
+                contributors=contributors[:5],
             ))
+        except Exception:
+            continue
 
     return projects[:10]
+
+
+def _search_github_api(token: str | None = None) -> List[GithubProject]:
+    """使用 GitHub Search API 搜索热门 AI 项目（需 token 避免限速）"""
+    import os
+    projects: List[GithubProject] = []
+    headers = {
+        "User-Agent": "AI-Daily-News-Bot/1.0",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    # 优先使用传入 token，其次读环境变量（GitHub Actions 自动提供 GITHUB_TOKEN）
+    auth_token = token or os.environ.get("GITHUB_TOKEN", "")
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+
+    try:
+        resp = requests.get(
+            "https://api.github.com/search/repositories",
+            params={
+                "q": "topic:llm OR topic:deep-learning OR topic:machine-learning stars:>500",
+                "sort": "stars",
+                "order": "desc",
+                "per_page": 15,
+            },
+            headers=headers,
+            timeout=settings.request_timeout,
+        )
+        resp.raise_for_status()
+        for item in resp.json().get("items", []):
+            projects.append(GithubProject(
+                name=item.get("full_name", ""),
+                url=item.get("html_url", ""),
+                description=item.get("description", "") or "",
+                stars=item.get("stargazers_count", 0),
+                forks=item.get("forks_count", 0),
+                language=item.get("language", "") or "",
+            ))
+    except Exception as e:
+        logger.warning(f"GitHub API 搜索失败: {e}")
+
+    return projects[:10]
+
+
+def collect_github_trending() -> List[GithubProject]:
+    """收集 GitHub AI 相关趋势项目（官方页面抓取 → API 兜底）"""
+    # 1. 优先抓取官方 Trending 页面（无需认证，结果最准确）
+    projects = _scrape_github_trending()
+    if projects:
+        return projects
+
+    # 2. 兜底：GitHub Search API（使用 GITHUB_TOKEN 避免限速）
+    logger.info("Trending 页面抓取为空，使用 GitHub API 搜索兜底")
+    return _search_github_api()
 
 
 # ─── 主入口 ───────────────────────────────────────────────────────────────────
