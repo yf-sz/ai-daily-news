@@ -1,0 +1,72 @@
+name: Daily AI News → Blog
+
+on:
+  # 每天北京时间 08:00（UTC 00:00）自动运行
+  schedule:
+    - cron: '0 0 * * *'
+  # 也可以在 GitHub Actions 页面手动触发
+  workflow_dispatch:
+    inputs:
+      days:
+        description: '收集过去几天的内容'
+        required: false
+        default: '1'
+      dry_run:
+        description: '仅生成报告，不发布到博客'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  collect-and-publish:
+    name: 收集 AI 资讯并发布到博客
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. 检出本仓库 ──────────────────────────────────────────────
+      - name: Checkout ai-daily-news
+        uses: actions/checkout@v4
+
+      # ── 2. 配置 Python 环境 ────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── 3. 运行收集 + 博客发布 ─────────────────────────────────────
+      - name: Collect AI news and publish to blog
+        env:
+          # 博客仓库地址（修改为你的仓库）
+          BLOG_REPO_URL: https://github.com/yf-sz/coco.github.io.git
+          # GitHub PAT：在博客仓库 Settings → Secrets → Actions 中添加
+          # 需要 contents:write 权限
+          BLOG_DEPLOY_TOKEN: ${{ secrets.BLOG_DEPLOY_TOKEN }}
+          BLOG_REPO_DIR: /tmp/blog-repo
+          # 可选：第三方 API 密钥
+          TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+          SEMANTIC_SCHOLAR_API_KEY: ${{ secrets.SEMANTIC_SCHOLAR_API_KEY }}
+        run: |
+          DAYS="${{ github.event.inputs.days || '1' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+
+          PUBLISH_FLAG=""
+          if [ "$DRY_RUN" != "true" ]; then
+            PUBLISH_FLAG="--publish-blog"
+          fi
+
+          python -m src.main --days "$DAYS" $PUBLISH_FLAG --verbose
+
+      # ── 4. 上传报告为 Artifact（方便下载查看）────────────────────
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-daily-report-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
