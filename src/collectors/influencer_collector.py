@@ -109,25 +109,34 @@ def _collect_twitter_updates() -> List[InfluencerUpdate]:
 # ─── 博客 RSS（从新闻收集器中筛选 influencer 分类）─────────────────────────────
 
 def _collect_blog_updates() -> List[InfluencerUpdate]:
-    """从 RSS Feed 中收集 AI 研究者博客更新"""
+    """并发收集 AI 研究者博客更新"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from src.collectors.news_collector import collect_from_rss
 
     updates: List[InfluencerUpdate] = []
     feeds = [f for f in sources.get("news_feeds", []) if f.get("category") == "influencer"]
 
-    for feed_config in feeds:
-        logger.info(f"收集博客更新: {feed_config['name']}")
+    def _fetch(feed_config: dict) -> List[InfluencerUpdate]:
         items = collect_from_rss(feed_config)
-        for item in items:
-            updates.append(InfluencerUpdate(
+        return [
+            InfluencerUpdate(
                 author=feed_config["name"],
                 platform="Blog",
                 content=item.summary,
                 url=item.url,
                 published=item.published,
                 tags=item.tags,
-            ))
-        logger.info(f"  → 获取 {len(items)} 篇")
+            )
+            for item in items
+        ]
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(_fetch, f): f for f in feeds}
+        for future in as_completed(futures):
+            try:
+                updates.extend(future.result())
+            except Exception as e:
+                logger.debug(f"博客收集跳过: {e}")
 
     return updates
 

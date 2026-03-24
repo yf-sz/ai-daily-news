@@ -31,8 +31,8 @@ class Settings:
     max_items_per_source: int = int(os.getenv("MAX_ITEMS_PER_SOURCE", "10"))
     days_back: int = int(os.getenv("DAYS_BACK", "1"))
 
-    # Request timeout
-    request_timeout: int = 15
+    # Request timeout（单个请求超时，并发拉取时总耗时约等于此值）
+    request_timeout: int = 8
 
 
 settings = Settings()
