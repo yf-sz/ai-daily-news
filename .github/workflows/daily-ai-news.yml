@@ -36,7 +36,9 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
 
       # ── 3. 运行收集 + 博客发布 ─────────────────────────────────────
       - name: Collect AI news and publish to blog
