@@ -94,17 +94,27 @@ def collect_from_rss(feed_config: dict) -> List[NewsItem]:
 
 
 def collect_all_news() -> List[NewsItem]:
-    """收集所有配置来源的新闻"""
+    """并发收集所有配置来源的新闻（失败的源静默跳过）"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     all_items: List[NewsItem] = []
     feeds = sources.get("news_feeds", [])
 
-    for feed_config in feeds:
-        logger.info(f"收集新闻: {feed_config['name']}")
-        items = collect_from_rss(feed_config)
-        all_items.extend(items)
-        logger.info(f"  → 获取 {len(items)} 条")
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_feed = {
+            executor.submit(collect_from_rss, feed_config): feed_config
+            for feed_config in feeds
+        }
+        for future in as_completed(future_to_feed):
+            feed_config = future_to_feed[future]
+            try:
+                items = future.result()
+                if items:
+                    logger.info(f"  ✓ {feed_config['name']}: {len(items)} 条")
+                all_items.extend(items)
+            except Exception as e:
+                logger.debug(f"  ✗ {feed_config['name']}: {e}")
 
-    # 按发布时间倒序排列
     all_items.sort(
         key=lambda x: x.published or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
