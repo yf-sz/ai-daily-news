@@ -16,6 +16,12 @@ on:
         type: boolean
         required: false
         default: false
+  # push reports/trigger 文件时也触发（用于按需发布）
+  push:
+    branches:
+      - main
+    paths:
+      - 'reports/trigger'
 
 jobs:
   collect-and-publish:
