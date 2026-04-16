@@ -16,12 +16,14 @@ on:
         type: boolean
         required: false
         default: false
-  # push reports/trigger 文件时也触发（用于按需发布）
+  # push reports/trigger 文件时触发自动收集（旧方式）
+  # push reports/YYYY-MM-DD-ai-daily-news.md 时触发手动报告发布（新方式）
   push:
     branches:
       - main
     paths:
       - 'reports/trigger'
+      - 'reports/????-??-??-ai-daily-news.md'
 
 jobs:
   collect-and-publish:
@@ -46,18 +48,67 @@ jobs:
           pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
-      # ── 3. 运行收集 + 博客发布 ─────────────────────────────────────
-      - name: Collect AI news and publish to blog
+      # ── 3. 检测是否存在手动生成的今日报告 ─────────────────────────
+      - name: Check for pre-built report
+        id: check_report
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          REPORT_FILE="reports/${TODAY}-ai-daily-news.md"
+          if [ -f "$REPORT_FILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "report_file=$REPORT_FILE" >> $GITHUB_OUTPUT
+            echo "✅ 发现手动生成的报告：$REPORT_FILE"
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  未找到今日手动报告，将运行自动收集"
+          fi
+
+      # ── 4a. 如存在手动报告：直接发布到博客 ────────────────────────
+      - name: Publish pre-built report to blog
+        if: steps.check_report.outputs.found == 'true'
         env:
-          # 博客仓库地址（修改为你的仓库）
           BLOG_REPO_URL: https://github.com/yf-sz/coco.github.io.git
-          # GitHub PAT：在博客仓库 Settings → Secrets → Actions 中添加
-          # 需要 contents:write 权限
           BLOG_DEPLOY_TOKEN: ${{ secrets.BLOG_DEPLOY_TOKEN }}
           BLOG_REPO_DIR: /tmp/blog-repo
-          # GitHub Actions 自动提供，用于 GitHub API 调用（避免匿名限速）
+        run: |
+          REPORT_FILE="${{ steps.check_report.outputs.report_file }}"
+          FILENAME=$(basename "$REPORT_FILE")
+          TODAY=$(date -u +%Y-%m-%d)
+
+          # 配置 Git 用户信息
+          git config --global user.name "AI Daily News Bot"
+          git config --global user.email "bot@ai-daily-news"
+
+          # 克隆博客仓库
+          AUTH_URL="${BLOG_REPO_URL/https:\/\//https:\/\/${BLOG_DEPLOY_TOKEN}@}"
+          git clone "$AUTH_URL" "$BLOG_REPO_DIR"
+
+          # 检查文章是否已存在
+          DEST="$BLOG_REPO_DIR/_posts/$FILENAME"
+          if [ -f "$DEST" ]; then
+            echo "⚠️  文章已存在，跳过：$FILENAME"
+            exit 0
+          fi
+
+          # 复制文章
+          mkdir -p "$BLOG_REPO_DIR/_posts"
+          cp "$REPORT_FILE" "$DEST"
+
+          # Commit & Push
+          cd "$BLOG_REPO_DIR"
+          git add "_posts/$FILENAME"
+          git commit -m "docs: add AI daily news ${TODAY}"
+          git push origin HEAD
+          echo "✅ 已发布到博客：$FILENAME"
+
+      # ── 4b. 无手动报告：运行自动收集 + 发布 ──────────────────────
+      - name: Collect AI news and publish to blog
+        if: steps.check_report.outputs.found == 'false'
+        env:
+          BLOG_REPO_URL: https://github.com/yf-sz/coco.github.io.git
+          BLOG_DEPLOY_TOKEN: ${{ secrets.BLOG_DEPLOY_TOKEN }}
+          BLOG_REPO_DIR: /tmp/blog-repo
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 可选：第三方 API 密钥
           TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           SEMANTIC_SCHOLAR_API_KEY: ${{ secrets.SEMANTIC_SCHOLAR_API_KEY }}
@@ -72,7 +123,7 @@ jobs:
 
           python -m src.main --days "$DAYS" $PUBLISH_FLAG --verbose
 
-      # ── 4. 上传报告为 Artifact（方便下载查看）────────────────────
+      # ── 5. 上传报告为 Artifact（方便下载查看）────────────────────
       - name: Upload report artifact
         if: always()
         uses: actions/upload-artifact@v4
