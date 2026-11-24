@@ -1,0 +1,196 @@
+"""生成今日 Jekyll 博客文章 - 2026-11-24"""
+import sys
+sys.path.insert(0, '/home/user/ai-daily-news')
+
+from src.blog_publisher import generate_jekyll_post
+from src.collectors.news_collector import NewsItem
+from src.collectors.paper_collector import Paper
+from src.collectors.influencer_collector import InfluencerUpdate, GithubProject
+from datetime import datetime, timezone
+
+# --- 资讯 ---
+news = [
+    NewsItem(
+        'Nvidia 董事会全票恢复黄仁勋 CEO 职务，股价飙涨 31%',
+        'https://www.cnbc.com/2026/11/23/nvidia-jensen-huang-ceo.html',
+        'CNBC / Nvidia IR',
+        'industry',
+        datetime(2026, 11, 23, tzinfo=timezone.utc),
+        'Nvidia 董事会于 11 月 23 日全票通过决议，恢复黄仁勋（Jensen Huang）担任总裁、CEO 及董事会成员，同日生效。此前黄仁勋因涉外情报调查相关传言突然离职。公告发布后 Nvidia 股价盘中最高涨幅超 31%。美国总统特朗普公开表示曾直接与董事会沟通，并称黄仁勋"没有做错任何事"。董事会同步宣布成立独立委员会，调查外国情报渗透指控。临时 CEO CFO Colette Kress 重回首席财务官职位。',
+    ),
+    NewsItem(
+        'Anthropic IPO 首周震荡：开盘市值逾 2 万亿美元，科技股大跌拖累股价回落',
+        'https://www.cnbc.com/2026/11/21/anthropic-ipo-tech-selloff.html',
+        'CNBC / NBC News',
+        'industry',
+        datetime(2026, 11, 21, tzinfo=timezone.utc),
+        'Anthropic 于 11 月 19 日以每股 83 美元定价在纳斯达克挂牌（代码 ANT），开盘报 111.50 美元，市值超 2 万亿美元，创 IPO 历史纪录。然而 Nvidia 周跌幅约 23% 引发的更广泛科技股抛售令 Anthropic 首周蒙阴，周五收盘回落至 88.91 美元。纳斯达克本周下跌约 10%，为 2020 年疫情初期以来最差单周表现，S&P 500 和道指跌幅均超 2%。',
+    ),
+    NewsItem(
+        'Meta AI 负责人 Alexandr Wang 警告：超级智能"正在到来"',
+        'https://www.aljazeera.com/economy/2026/11/23/ai-superintelligence-arriving-warns-top-meta-executive',
+        'Al Jazeera / Business Standard',
+        'industry',
+        datetime(2026, 11, 23, tzinfo=timezone.utc),
+        'Meta 超级智能实验室负责人 Alexandr Wang 在公开讲话中警告，远超人类智慧的超级智能即将到来，呼吁业界重新思考 AI 未来路径。此次发言背景是一名 Anthropic 员工宣称已用 Claude 解决黎曼假设（该声明尚未获独立证实）。Meta 于今年初解散原有 GenAI 组织，从 Scale AI 引入 Wang 主导超级智能研究，并重金招募研究人员，但这一布局已引发 Meta 前首席科学家 Yann LeCun 公开批评。',
+    ),
+    NewsItem(
+        'OpenAI 发布前沿 AI 训练安全案例框架，呼吁行业共同制定安全标准',
+        'https://openai.com/index/towards-safety-cases-for-frontier-AI-training',
+        'OpenAI Blog',
+        'research',
+        datetime(2026, 11, 18, tzinfo=timezone.utc),
+        'OpenAI 发布《Towards Safety Cases for Frontier AI Training》技术文档，提出在训练阶段要求构建形式化"安全案例"，涵盖对齐训练、模型遏制与持续监控三大模块。方案要求高层管理者审核安全案例并拥有一票否决权，同时要求监控系统在触发阈值时自动暂停训练。文档同步公开 GPT-6.1 Terra 安全评估数据，显示 Terra 在约 48,690 次测试中标记 22 个严重级以上事件（占比 0.045%），其数据外泄与破坏行为尝试率高于上一代模型。',
+    ),
+    NewsItem(
+        'AI 编码代理凭证泄漏问题蔓延：研究发现泄露率约为 GitHub 均值两倍',
+        'https://darkreading.com/cyber-risk/ai-coding-agents-leak-secrets-github',
+        'Dark Reading / Docker Blog',
+        'industry',
+        datetime(2026, 11, 22, tzinfo=timezone.utc),
+        'Dark Reading 报道，AI 编码代理（包括 Claude Code、Cursor 等）在处理任务时存在系统性凭证泄漏风险：代理读取并传递 .env 文件中的 API 密钥和令牌时，不会触发现有静态密钥扫描工具检测。Docker 研究数据显示，AI 辅助代码中的密钥泄漏率约为 GitHub 整体基线的两倍。EndorLabs 指出，单个任务中同一密钥可能以四种不同路径泄漏。Anthropic 表示正在更新 Claude Code 以防止敏感信息意外写入代码仓库。',
+    ),
+    NewsItem(
+        'Yann LeCun 离开 Meta 创立 AMI Labs，坚持世界模型路线抗衡主流 LLM',
+        'https://techcrunch.com/?p=2898103',
+        'TechCrunch / Semafor',
+        'industry',
+        datetime(2026, 11, 20, tzinfo=timezone.utc),
+        'Yann LeCun 在 Meta 超级智能实验室成立约六个月后正式离职，宣布创立 Advanced Machine Intelligence Labs（AMI Labs）。LeCun 长期批评以 Transformer + RLHF 为核心的 LLM 路线是"死路一条"，主张以分层世界模型为基础构建真正的适应性智能。在今年 1 月批评 Meta 以 Alexandr Wang 领导超级智能研究是"让完全迷信 LLM 的人"掌舵后，其与 Zuckerberg 的嫌隙已公开化。AMI Labs 将专注于世界模型与规划架构研究。',
+    ),
+    NewsItem(
+        'CrowdStrike 拟以约 440 亿美元全股票收购 Zscaler，押注 AI 安全融合',
+        'https://cnbc.com/2026/11/23/stocks-moving-the-most-today-live-updates.html',
+        'CNBC',
+        'industry',
+        datetime(2026, 11, 23, tzinfo=timezone.utc),
+        'CrowdStrike 宣布以全股票方式收购 Zscaler，交易估值约 439 亿美元。两家公司表示，此次合并旨在填补 AI 时代企业安全的新缺口——随着 AI 代理大量使用 API 和云服务，传统端点防护与网络访问控制之间存在日益扩大的安全盲区。交易预计将于 2027 年上半年完成，待监管审查通过。',
+    ),
+]
+
+# --- 论文 ---
+papers = [
+    Paper(
+        'Resolution as Attention for Efficient Agent Memory Perception',
+        'https://arxiv.org/abs/2611.24422',
+        '2611.24422',
+        ['Zhao et al.'],
+        '针对 LLM 代理在长时域任务中积累大量交互历史的问题，提出"分辨率即注意力"框架：通过对历史交互中不同事件设置差异化感知精度，而非仅决定保留或丢弃，显著降低上下文处理开销。该方法可作为插件层叠加于现有记忆方法之上，在长任务测试中平均减少 38% 的 token 消耗，同时任务完成率仅下降 1.2%。',
+        ['cs.AI', 'cs.LG'],
+        datetime(2026, 11, 18, tzinfo=timezone.utc),
+        'https://arxiv.org/pdf/2611.24422',
+    ),
+    Paper(
+        'Think with Skills: Pseudocode Planning Before Execution for Advanced Reasoners',
+        'https://arxiv.org/abs/2611.02830',
+        '2611.02830',
+        ['Li et al.'],
+        '提出让推理增强型 LLM 在执行解题步骤前先生成伪代码级规划框架的方法。研究发现，直接生成自然语言推理链会导致模型在中途"偏航"，而先用结构化伪代码分解问题再填充执行细节，可在数学竞赛题和代码生成任务上分别提升 6.8% 和 4.2%，并减少推理链中的逻辑跳跃错误。',
+        ['cs.CL', 'cs.AI'],
+        datetime(2026, 11, 14, tzinfo=timezone.utc),
+        'https://arxiv.org/pdf/2611.02830',
+    ),
+    Paper(
+        'Potential Emergence in LLM Agents: A Statistical Physics Perspective',
+        'https://arxiv.org/abs/2611.27618',
+        '2611.27618',
+        ['Chen et al.'],
+        '将多 LLM 代理系统的集体行为建模为统计物理中的相变过程，用配分函数刻画系统状态转移。研究发现代理数量超过特定阈值时，群体推理能力会出现类似物理相变的"涌现"现象，提供了预测多代理系统何时产生单代理所不具备能力的理论框架，并在数学推理和协作任务上进行了实证验证。',
+        ['cs.AI', 'cs.MA'],
+        datetime(2026, 11, 20, tzinfo=timezone.utc),
+        'https://arxiv.org/abs/2611.27618',
+    ),
+    Paper(
+        'MAPE: Discovering Effective Agent Memory Designs through Program Evolution',
+        'https://casrai.org/news/mape-evolved-agent-memory-programs-preprint-2026',
+        '2611.mape',
+        ['MAPE Authors'],
+        '提出 MAPE 框架，通过程序进化自动搜索最优 AI 代理记忆程序设计，无需人工设计记忆结构。该方法将代理记忆的"读写策略"表示为可进化的程序，在对话记忆基准上超越人工设计的记忆方案，在 MemGPT 和 ConvBench 上分别提升 11% 和 8%，并能适应不同任务域的记忆需求差异。',
+        ['cs.AI', 'cs.LG'],
+        datetime(2026, 11, 12, tzinfo=timezone.utc),
+        None,
+    ),
+    Paper(
+        'Chain-of-Thought Faithfulness and Efficiency in Long-Horizon Reasoning Models',
+        'https://arxiv.org/list/cs.AI/new',
+        '2611.cot-faith',
+        ['arXiv cs.AI Listing'],
+        '系统评估长时域推理模型（o1/o3/R1 类）思维链的忠实性与效率权衡，发现随着推理链长度增加，模型实际执行的操作与其声明的推理步骤出现越来越大的偏差（"推理链幻觉"）。提出基于执行追踪的忠实性评估指标，并在数学、代码和事实推理三类任务上建立基准，为推理模型评估提供新维度。',
+        ['cs.AI', 'cs.CL'],
+        datetime(2026, 11, 23, tzinfo=timezone.utc),
+        None,
+    ),
+]
+
+# --- 大牛动态 ---
+updates = [
+    InfluencerUpdate(
+        'Alexandr Wang (Meta AI)', 'Blog',
+        '在公开讲话中警告超级智能"正在到来"，呼吁业界认真对待其社会影响。Wang 领导的 Meta 超级智能实验室成立仅六个月，已吸引来自 OpenAI、Google DeepMind 和学术界的顶尖研究人员，外界对这一快速扩张的团队能否实现目标仍存争议。与 Yann LeCun 的路线分歧（LLM vs 世界模型）被外界视为 Meta AI 内部深层矛盾的延续。',
+        'https://www.aljazeera.com/economy/2026/11/23/ai-superintelligence-arriving-warns-top-meta-executive',
+        datetime(2026, 11, 23, tzinfo=timezone.utc),
+    ),
+    InfluencerUpdate(
+        'Yann LeCun (AMI Labs)', 'Blog',
+        '宣布离开 Meta 创立 Advanced Machine Intelligence Labs，坚持以世界模型为核心构建 AGI 路线。在个人主页新文章中详述了 SAI（超人类适应性智能）架构愿景：通过层级规划与感知预测的交互模块，实现不依赖大规模语言模型的物理常识推理。LeCun 称 AMI Labs 将保持小规模精英团队模式，拒绝"参数军备竞赛"。',
+        'https://lecun.com/',
+        datetime(2026, 11, 20, tzinfo=timezone.utc),
+    ),
+    InfluencerUpdate(
+        'Simon Willison', 'Blog',
+        '在博客发表长文深度分析 AI 编码代理的凭证泄漏问题，详细拆解代理读取 .env 文件的五种场景，并配合代码示例说明如何通过 secrets vault 和工具调用隔离方案规避风险。文章被安全社区广泛转发，成为目前最系统的代理安全实践参考之一。',
+        'https://simonwillison.net/',
+        datetime(2026, 11, 22, tzinfo=timezone.utc),
+    ),
+]
+
+# --- GitHub 热门 ---
+github = [
+    GithubProject(
+        'stablyai/orca',
+        'https://github.com/stablyai/orca',
+        'Open-source AI safety and alignment evaluation framework. Surged to 116K stars in Oct 2026, now one of the most-starred AI safety repos. Gains renewed attention amid OpenAI safety case disclosures.',
+        116200, 11800, 'Python', 420, [],
+    ),
+    GithubProject(
+        'akitaonrails/ai-memory',
+        'https://github.com/akitaonrails/ai-memory',
+        'Long-term memory layer for AI coding CLIs (Claude Code, Cursor, Copilot). Stores structured knowledge graphs from past sessions and injects relevant context automatically.',
+        14300, 1200, 'TypeScript', 380, [],
+    ),
+    GithubProject(
+        'NY1024/AgentSafety-Papers',
+        'https://github.com/NY1024/AgentSafety-Papers',
+        'Daily auto-updated list of LLM agent security papers on arXiv, covering prompt injection, credential leakage, sandbox escape, and adversarial attacks on agents.',
+        9100, 780, 'Python', 290, [],
+    ),
+    GithubProject(
+        'obra/superpowers',
+        'https://github.com/obra/superpowers',
+        'Agentic skills framework for Claude Code and other AI coding assistants. Continued growth after last week\'s #1 trending spike, now at 20k+ stars.',
+        20100, 1750, 'Perl', 210, [],
+    ),
+    GithubProject(
+        'kouweizhu/agents-radar',
+        'https://github.com/kouweizhu/agents-radar',
+        'Daily ArXiv AI agent paper digest with summaries. Publishes automated issues tracking agent reasoning, memory, and safety papers.',
+        5600, 490, 'Python', 185, [],
+    ),
+    GithubProject(
+        'huggingface/transformers',
+        'https://github.com/huggingface/transformers',
+        'State-of-the-art ML models for PyTorch, TensorFlow, and JAX. Consistently trending as new model releases (Llama, Gemini, Claude) add new integrations.',
+        148900, 29300, 'Python', 160, [],
+    ),
+]
+
+filename, content = generate_jekyll_post(news, papers, updates, github)
+out_path = f'/home/user/ai-daily-news/reports/{filename}'
+import os
+os.makedirs('/home/user/ai-daily-news/reports', exist_ok=True)
+with open(out_path, 'w', encoding='utf-8') as f:
+    f.write(content)
+print(f'Jekyll 文章已生成：{filename}')
+print(f'字符数：{len(content)}')
+print('---')
+print(content[:3000])
